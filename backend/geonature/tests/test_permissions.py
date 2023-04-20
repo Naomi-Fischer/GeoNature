@@ -100,6 +100,7 @@ def roles(groups):
         "g12_r1": User(groups=[groups["g1"], groups["g2"]]),
         "g12_r2": User(groups=[groups["g1"], groups["g2"]]),
     }
+    roles.update(groups)
     with db.session.begin_nested():
         for role in roles.values():
             db.session.add(role)
@@ -225,3 +226,243 @@ class TestPermissions:
         assert_cruved("r1", "010001", module_a, object_a)
         assert_cruved("r1", "001000", module_b, object_a)
         assert_cruved("r1", "000100", module_a, object_b)
+
+    def test_module_objet_inheritance(
+        self,
+        permissions,
+        assert_cruved,
+        module_gn,
+        module_a,
+        module_b,
+        object_all,
+        object_a,
+        object_b,
+    ):
+        # Permissions for users "g1_r1" and "g1_r2", associated to the group "g1"
+        # For "g1"
+        permissions("g1", "121-1-", module=module_gn, object=object_all)  # [g1_gn]
+        permissions("g1", "0121-2", module=module_a, object=object_all)  # [g1_a]
+        permissions("g1", "1-1---", module=module_a, object=object_a)  # [g1_a_a]
+        permissions("g1", "--2--1", module=module_a, object=object_b)  # [g1_a_b]
+        # For "g1_r1"
+        permissions("g1_r1", "132-03", module=module_gn, object=object_all)  # [g1_r1_gn]
+        permissions("g1_r1", "-2---1", module=module_a, object=object_all)  # [g1_r1_a]
+        permissions("g1_r1", "0-3-03", module=module_a, object=object_a)  # [g1_r1_a_a]
+        # For "g1_r2"
+        permissions("g1_r2", "--31-0", module=module_a, object=object_all)  # [g1_r2_a]
+        permissions("g1_r2", "--31-0", module=module_a, object=object_b)  # [g1_r2_a_b]
+
+        # Permissions for one user "r1", not associated to any group
+        permissions("r1", "121-31", module=module_gn, object=object_all)  # [r1_gn]
+        permissions("r1", "0123--", module=module_a, object=object_all)  # [r1_a]
+        permissions("r1", "0121-3", module=module_b, object=object_all)  # [r1_b]
+        permissions("r1", "1-1---", module=module_a, object=object_a)  # [r1_a_a]
+        permissions("r1", "--2---", module=module_a, object=object_b)  # [r1_a_b]
+        permissions("r1", "----2-", module=module_b, object=object_a)  # [r1_b_a]
+        permissions("r1", "-1----", module=module_b, object=object_b)  # [r1_b_b]
+
+        # Permissions to get group "g2"
+        permissions("g2", "------")
+
+        is_with_inheritance_modules_objects = False
+
+        ## Permissions added to keep "GEONATURE" module and "ALL" object inheritance
+        if is_with_inheritance_modules_objects:
+            ## Inheritances for user "r1" (module and object inheritances, without group inheritance interaction)
+            # Inheritances from module "GEONATURE"
+            #   - from [r1_gn]]
+            permissions(
+                "r1", "----31", module=module_a, object=object_all
+            )  # [r1_'1] given [r1_a]]
+            permissions(
+                "r1", "----3-", module=module_b, object=object_all
+            )  # [r1_'2] given [r1_b]]
+            # Inheritances from module "A" and object "ALL"
+            #   - from [r1_a]]
+            permissions("r1", "-1-3--", module=module_a, object=object_a)  # given [r1_a_a]
+            permissions("r1", "01-3--", module=module_a, object=object_b)  # given [r1_a_b]
+            #   - from [r1_b]]
+            permissions("r1", "0121-3", module=module_b, object=object_a)  # given [r1_b_a]
+            permissions("r1", "0-21-3", module=module_b, object=object_b)  # given [r1_b_b]
+            # Inheritances from module "GEONATURE" and object "ALL"
+            #   - from [r1_'1]
+            permissions("r1", "----31", module=module_a, object=object_a)  # given [r1_a_a]
+            permissions("r1", "----31", module=module_a, object=object_b)  # given [r1_a_b]
+            #   - from [r1_'2]
+            permissions("r1", "------", module=module_b, object=object_a)  # given [r1_b_a]
+            permissions("r1", "----3-", module=module_b, object=object_b)  # given [r1_b_b]
+
+        ## Testing computed scope permissions
+        # With additional permissions to inherit "GEONATURE" and "ALL"
+        if is_with_inheritance_modules_objects:
+            ## Users "g1_r1" and "g1_r2"
+            ##  Some permissions defined for the user AND some inherited from groups
+            ##  (modules and objects inheritances, with group inheritances interaction)
+            # For "g1_r1"
+            assert_cruved("g1_r1", "132013")  # given [g1_r1_gn] and [g1_gn]
+            assert_cruved("g1_r1", "0221-2", module=module_a)  # given [g1_r1_a] and [g1_a]
+            assert_cruved(
+                "g1_r1", "103003", module=module_a, object=object_a
+            )  # given [g1_r1_a_a] and [g1_a_a]
+            assert_cruved(
+                "g1_r1", "022111", module=module_a, object=object_b
+            )  # given [g1_a_b], then [g1_r1_a] and [g1_a], then [g1_r1_gn] and [g1_gn]
+            assert_cruved("g1_r1", "132013", module=module_b)  # given [g1_r1_gn] and [g1_gn]
+            assert_cruved(
+                "g1_r1", "132013", module=module_b, object=object_a
+            )  # given [g1_r1_gn] and [g1_gn]
+            assert_cruved(
+                "g1_r1", "132013", module=module_b, object=object_b
+            )  # given [g1_r1_gn] and [g1_gn]
+            # For "g1_r2"
+            assert_cruved("g1_r2", "121010")  # given [g1_gn]
+            assert_cruved(
+                "g1_r2", "013112", module=module_a
+            )  # given [g1_r2_a] and [g1_a], then [g1_gn]
+            assert_cruved(
+                "g1_r2", "111112", module=module_a, object=object_a
+            )  # given [g1_a_a], then [g1_r2_a] and [g1_a], then [g1_gn]
+            assert_cruved(
+                "g1_r2", "013111", module=module_a, object=object_b
+            )  # given [g1_r2_a_b] and [g1_a_b], then [g1_r2_a] and [g1_a], then [g1_gn]
+            assert_cruved("g1_r2", "121010", module=module_b)  # given [g1_gn]
+            assert_cruved("g1_r2", "121010", module=module_b, object=object_a)  # given [g1_gn]
+            assert_cruved("g1_r2", "121010", module=module_b, object=object_b)  # given [g1_gn]
+
+            ## Users "g12_r1" and "g12_r2"
+            ##  No permission defined for the user BUT some inherited from groups
+            ##  (group inheritances interaction)
+            # For "g12_r1"
+            assert_cruved("g12_r1", "121010")  # given [g1_gn]
+            assert_cruved("g12_r1", "012112", module=module_a)  # given [g1_a], then [g1_gn]
+            assert_cruved(
+                "g12_r1", "111112", module=module_a, object=object_a
+            )  # given [g1_a_a], then [g1_a], then [g1_gn]
+            assert_cruved(
+                "g12_r1", "012111", module=module_a, object=object_b
+            )  # given [g1_a_b], then [g1_a], then [g1_gn]
+            assert_cruved("g12_r1", "121010", module=module_b)  # given [g1_gn]
+            assert_cruved("g12_r1", "121010", module=module_b, object=object_a)  # given [g1_gn]
+            assert_cruved("g12_r1", "121010", module=module_b, object=object_b)  # given [g1_gn]
+            # For "g12_r2" (same as for "g12_r1")
+            assert_cruved("g12_r2", "121010")  # given [g1_gn]
+
+            ## Users "r2" and "g2_r1" and Group "g2"
+            ## Neither any permission defined for the user NOR any inherited from groups
+            ## (nothing)
+            # For "r2"
+            assert_cruved("r2", "000000")  # nothing
+            assert_cruved("r2", "000000", module=module_a)  # nothing
+            assert_cruved("r2", "000000", module=module_a, object=object_a)  # nothing
+            assert_cruved("r2", "000000", module=module_a, object=object_b)  # nothing
+            assert_cruved("r2", "000000", module=module_b)  # nothing
+            assert_cruved("r2", "000000", module=module_b, object=object_a)  # nothing
+            assert_cruved("r2", "000000", module=module_b, object=object_b)  # nothing
+            # For "g2_r1" (same as for "r2")
+            assert_cruved("g2_r1", "000000")  # nothing
+            # For "g2" (same as for "r2")
+            assert_cruved("g2", "000000")  # nothing
+
+            ## Scope permissions for user "r1" and group "g1"
+            ##  Some permissions defined for the user BUT not any inherited from group
+            ##  (module and object inheritances, without group inheritance interaction)
+            # For "r1"
+            assert_cruved("r1", "121031")  # given [r1_gn]
+            assert_cruved("r1", "012331", module=module_a)  # given [r1_a], then [r1_gn]
+            assert_cruved(
+                "r1", "111331", module=module_a, object=object_a
+            )  # given [r1_a_a], then [r1_a], then [r1_gn]
+            assert_cruved(
+                "r1", "012331", module=module_a, object=object_b
+            )  # given [r1_a_b], then [r1_a], then [r1_gn]
+            assert_cruved("r1", "012133", module=module_b)  # given [r1_b], then [r1_gn]
+            assert_cruved(
+                "r1", "012123", module=module_b, object=object_a
+            )  # given [r1_b_a], then [r1_b], then [r1_gn]
+            assert_cruved(
+                "r1", "012133", module=module_b, object=object_b
+            )  # given [r1_b_b], then [r1_b], then [r1_gn]
+            # For "g1"
+            assert_cruved("g1", "121010")  # given [g1_gn]
+            assert_cruved("g1", "012112", module=module_a)  # given [g1_a], then [g1_gn]
+            assert_cruved(
+                "g1", "111112", module=module_a, object=object_a
+            )  # given [g1_a_a], then [g1_a], then [g1_gn]
+            assert_cruved(
+                "g1", "012111", module=module_a, object=object_b
+            )  # given [g1_a_b], then [g1_a], then [g1_gn]
+            assert_cruved("g1", "121010", module=module_b)  # given [g1_gn]
+            assert_cruved("g1", "121010", module=module_b, object=object_a)  # given [g1_gn]
+            assert_cruved("g1", "121010", module=module_b, object=object_b)  # given [g1_gn]
+        # Without additional permissions to inherit "GEONATURE" and "ALL"
+        # --> Still inheritance group->user
+        else:
+            ## Users "g1_r1" and "g1_r2"
+            ##  Some permissions defined for the user AND some inherited from groups
+            # For "g1_r1"
+            assert_cruved("g1_r1", "132013")  # given [g1_r1_gn] and [g1_gn]
+            assert_cruved("g1_r1", "022102", module=module_a)  # given [g1_r1_a] and [g1_a]
+            assert_cruved(
+                "g1_r1", "103003", module=module_a, object=object_a
+            )  # given [g1_r1_a_a] and [g1_a_a]
+            assert_cruved("g1_r1", "002001", module=module_a, object=object_b)  # given [g1_a_b]
+            assert_cruved("g1_r1", "000000", module=module_b)  # nothing
+            assert_cruved("g1_r1", "000000", module=module_b, object=object_a)  # nothing
+            assert_cruved("g1_r1", "000000", module=module_b, object=object_b)  # nothing
+            # For "g1_r2"
+            assert_cruved("g1_r2", "121010")  # given [g1_gn]
+            assert_cruved("g1_r2", "013102", module=module_a)  # given [g1_r2_a] and [g1_a]
+            assert_cruved("g1_r2", "101000", module=module_a, object=object_a)  # given [g1_a_a]
+            assert_cruved(
+                "g1_r2", "003101", module=module_a, object=object_b
+            )  # given [g1_r2_a_b] and [g1_a_b]
+            assert_cruved("g1_r2", "000000", module=module_b)  # nothing
+            assert_cruved("g1_r2", "000000", module=module_b, object=object_a)  # nothing
+            assert_cruved("g1_r2", "000000", module=module_b, object=object_b)  # nothing
+
+            ## Users "g1_r2", "g12_r1" and "g12_r2"
+            ##  No permission defined for the user BUT some inherited from groups
+            # For "g12_r1"
+            assert_cruved("g12_r1", "121010")  # given [g1_gn]
+            assert_cruved("g12_r1", "012102", module=module_a)  # given [g1_a]
+            assert_cruved("g12_r1", "101000", module=module_a, object=object_a)  # given [g1_a_a]
+            assert_cruved("g12_r1", "002001", module=module_a, object=object_b)  # given [g1_a_b]
+            assert_cruved("g12_r1", "000000", module=module_b)  # nothing
+            assert_cruved("g12_r1", "000000", module=module_b, object=object_a)  # nothing
+            assert_cruved("g12_r1", "000000", module=module_b, object=object_b)  # nothing
+            # For "g12_r2" (same as for "g12_r1")
+            assert_cruved("g12_r2", "121010")  # given [g1_gn]
+
+            ## Users "r2" and "g2_r1" and Group "g2"
+            ## Neither any permission defined for the user NOR any inherited from groups
+            # For "r2"
+            assert_cruved("r2", "000000")  # nothing
+            assert_cruved("r2", "000000", module=module_a)  # nothing
+            assert_cruved("r2", "000000", module=module_a, object=object_a)  # nothing
+            assert_cruved("r2", "000000", module=module_a, object=object_b)  # nothing
+            assert_cruved("r2", "000000", module=module_b)  # nothing
+            assert_cruved("r2", "000000", module=module_b, object=object_a)  # nothing
+            assert_cruved("r2", "000000", module=module_b, object=object_b)  # nothing
+            # For "g2_r1" (same as for "r2")
+            assert_cruved("g2_r1", "000000")  # nothing
+            # For "g2" (same as for "r2")
+            # assert_cruved("g2", "000000")  # nothing
+
+            ## Scope permissions for user "r1" and group "g1"
+            ##  Some permissions defined for the user BUT not any inherited from group
+            # For "r1"
+            assert_cruved("r1", "121031")  # given [r1_gn]
+            assert_cruved("r1", "012300", module=module_a)  # given [r1_a]
+            assert_cruved("r1", "101000", module=module_a, object=object_a)  # given [r1_a_a]
+            assert_cruved("r1", "002000", module=module_a, object=object_b)  # given [r1_a_b]
+            assert_cruved("r1", "012103", module=module_b)  # given [r1_b]
+            assert_cruved("r1", "000020", module=module_b, object=object_a)  # given [r1_b_a]
+            assert_cruved("r1", "010000", module=module_b, object=object_b)  # given [r1_b_b]
+            # For "g1"
+            assert_cruved("g1", "121010")  # given [g1_gn]
+            assert_cruved("g1", "0121020", module=module_a)  # given [g1_a]
+            assert_cruved("g1", "101000", module=module_a, object=object_a)  # given [g1_a_a]
+            assert_cruved("g1", "002001", module=module_a, object=object_b)  # given [g1_a_b]
+            assert_cruved("g1", "000000", module=module_b)  # nothing
+            assert_cruved("g1", "000000", module=module_b, object=object_a)  # nothing
+            assert_cruved("g1", "000000", module=module_b, object=object_b)  # nothing
