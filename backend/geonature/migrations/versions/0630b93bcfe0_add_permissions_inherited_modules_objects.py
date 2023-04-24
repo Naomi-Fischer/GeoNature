@@ -22,7 +22,10 @@ depends_on = None
 
 def upgrade():
     """
-    upgrade
+    Add the permissions that were computed by modules/objects inheritance
+    Remove the 'scope 0' filter
+
+    Create backup tables for the permissions and the filters.
     """
 
     """
