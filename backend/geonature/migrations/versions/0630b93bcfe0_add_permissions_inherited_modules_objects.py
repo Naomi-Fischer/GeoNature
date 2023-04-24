@@ -420,14 +420,43 @@ def upgrade():
 
 def downgrade():
     """
-    Restore permissions from backup table
+    Restore the permissions and filters from backup
     """
-    op.execute("DELETE FROM gn_permissions.cor_role_action_filter_module_object")
+
+    """
+    Restore filters from backup table
+    
+    restores, in particular, the filter for scope 0
+    """
     op.execute(
         """
-        INSERT INTO gn_permissions.cor_role_action_filter_module_object (id_role, id_action, id_module, id_object, id_filter)
-        SELECT id_role, id_action, id_module, id_object, id_filter
-        FROM gn_permissions.backup_cor_role_action_filter_module_object
+        DELETE FROM gn_permissions.t_filters;
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO gn_permissions.t_filters 
+            (id_permission, label_filter, value_filter, description_filter, id_filter_type)
+        SELECT id_permission, label_filter, value_filter, description_filter, id_filter_type
+        FROM gn_permissions.backup_t_filters
+        """
+    )
+    op.drop_table(schema="gn_permissions", table_name="backup_t_filters")
+
+    """
+    Restore permissions from backup table
+    """
+    op.execute(
+        """
+        DELETE FROM gn_permissions.cor_role_action_filter_module_object;
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO gn_permissions.cor_role_action_filter_module_object 
+            (id_permission, id_role, id_action, id_module, id_object, id_filter)
+        SELECT id_permission, id_role, id_action, id_module, id_object, id_filter
+        FROM gn_permissions.backup_cor_role_action_filter_module_object;
         """
     )
     op.drop_table(
