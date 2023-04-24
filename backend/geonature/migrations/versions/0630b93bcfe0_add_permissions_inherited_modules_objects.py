@@ -26,12 +26,98 @@ def upgrade():
     """
 
     """
-    Backup permissions in order to be able to downgrade
+    Backup permissions and filters in order to be able to downgrade
     """
+    # Backup permissions
+    # include Foreign Keys, so that restore is eventually not broken by update/removal
+    # of any referenced role, action, filter, module or object
     op.execute(
         """
-        CREATE TABLE gn_permissions.backup_cor_role_action_filter_module_object
-        AS TABLE gn_permissions.cor_role_action_filter_module_object
+        create or replace function create_backup_table_permissions(source_table text, new_table text)
+        returns void language plpgsql
+        as $$
+        declare
+            rec record;
+        begin
+            execute format(
+                'create table %s (like %s including all)',
+                new_table, source_table);
+            for rec in
+                select oid, conname
+                from pg_constraint
+                where contype = 'f' 
+                and conrelid = source_table::regclass
+            loop
+                execute format(
+                    'alter table %s add constraint %s %s',
+                    new_table,
+                    replace(rec.conname, 'cor_r_a_f_m_o', 'backup_cor_r_a_f_m_o'),
+                    pg_get_constraintdef(rec.oid));
+            end loop;
+            execute format(
+                'insert into %s select * from %s', 
+                new_table, source_table);
+        end $$;
+        """
+    )
+    op.execute(
+        """
+        SELECT
+        create_backup_table_permissions(
+        'gn_permissions.cor_role_action_filter_module_object',
+        'gn_permissions.backup_cor_role_action_filter_module_object'
+        );
+        """
+    )
+    op.execute(
+        """
+        DROP FUNCTION create_backup_table_permissions;
+        """
+    )
+    # Backup filters
+    # include Foreign Keys, so that restore is eventually not broken by update/removal
+    # of any referenced filter type
+    op.execute(
+        """
+        create or replace function create_backup_table_filters(source_table text, new_table text)
+        returns void language plpgsql
+        as $$
+        declare
+            rec record;
+        begin
+            execute format(
+                'create table %s (like %s including all)',
+                new_table, source_table);
+            for rec in
+                select oid, conname
+                from pg_constraint
+                where contype = 'f' 
+                and conrelid = source_table::regclass
+            loop
+                execute format(
+                    'alter table %s add constraint %s %s',
+                    new_table,
+                    replace(rec.conname, 't_filters', 'backup_t_filters'),
+                    pg_get_constraintdef(rec.oid));
+            end loop;
+            execute format(
+                'insert into %s select * from %s', 
+                new_table, source_table);
+        end $$;
+        """
+    )
+    op.execute(
+        """
+        SELECT
+        create_backup_table_filters(
+        'gn_permissions.t_filters',
+        'gn_permissions.backup_t_filters'
+        );
+        """
+    )
+    op.execute(
+        """
+        DROP FUNCTION create_backup_table_filters;
         """
     )
 
