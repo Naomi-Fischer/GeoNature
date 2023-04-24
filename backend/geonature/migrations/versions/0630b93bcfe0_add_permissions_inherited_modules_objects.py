@@ -375,7 +375,10 @@ def upgrade():
     """
     )
 
-    # Remove scope '0'
+    """
+    Remove scope '0'
+    """
+    # Remove associated permissions
     op.execute(
         """
         DELETE FROM
@@ -395,12 +398,20 @@ def upgrade():
             )
         """
     )
+    # Remove filter
+    # we assume that we have 'ON DELETE NO ACTION' for 'fk_cor_r_a_f_m_o_id_filter',
+    # and thus for 'fk_backup_cor_r_a_f_m_o_id_filter, and that removal of the filter for 'scope 0' will not
+    # lead, by cascade, to a suppression of the associated permissions in the backup table of permissions.
     op.execute(
         """
         DELETE FROM
             gn_permissions.t_filters
         WHERE
-            id_filter_type = (SELECT id_filter_type FROM gn_permissions.bib_filters_type WHERE code_filter_type = 'SCOPE')
+            id_filter_type = (
+                SELECT id_filter_type 
+                FROM gn_permissions.bib_filters_type 
+                WHERE code_filter_type = 'SCOPE'
+                )
         AND
             value_filter = '0'
         """
