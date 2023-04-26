@@ -270,4 +270,10 @@ export const DYNAMIC_FORM_DEF = [
     attribut_name: 'unique_id_sinp',
     required: false,
   },
+  {
+    type_widget: 'number',
+    attribut_label: 'ID (id_synthese)',
+    attribut_name: 'id_synthese',
+    required: false,
+  },
 ];
